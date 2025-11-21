@@ -1,0 +1,114 @@
+---
+- name: Install Docker and deploy web application
+  hosts: all
+  become: yes
+
+  vars:
+    docker_project_local_path: "{{ playbook_dir }}/../docker"    # Local path on Ansible controller
+  docker_project_remote_path: /home/lubuntu/group1_sysad_finalproject    # Path on remote hosts
+    container_name: proj_webapp_container
+    nginx_image: nginx:latest
+
+  tasks:
+    # ---------------------- Install Docker (Ubuntu/Debian) ----------------------
+    - name: Update APT cache
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install prerequisite packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Add Docker GPG key
+      command: >
+        bash -c "mkdir -p /etc/apt/keyrings &&
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg |
+        gpg --dearmor -o /etc/apt/keyrings/docker.gpg"
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+      when: ansible_os_family == "Debian"
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable"
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    # ---------------------- Install Docker (CentOS/RHEL) ----------------------
+    - name: Install required packages
+      yum:
+        name:
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Add Docker repository (CentOS)
+      command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      when: ansible_os_family == "RedHat"
+
+    - name: Install Docker (CentOS/RHEL)
+      yum:
+        name: docker-ce
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    # ---------------------- Start Docker ----------------------
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    # ---------------------- Copy index.html ----------------------
+    - name: Ensure project directory exists on remote host
+      file:
+        path: "{{ docker_project_remote_path }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy index.html to remote host
+      copy:
+        src: "{{ docker_project_local_path }}/index.html"
+        dest: "{{ docker_project_remote_path }}/index.html"
+        owner: root
+        group: root
+        mode: '0644'
+        force: yes   # <-- ensures latest index.html is copied
+
+    # ---------------------- Run Nginx Container ----------------------
+    - name: Remove old container if it exists
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: absent
+        force_kill: yes
+
+    - name: Run Nginx container with mounted index.html
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ nginx_image }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "8080:80"
+        volumes:
+          - "{{ docker_project_remote_path }}/index.html:/usr/share/nginx/html/index.html"
