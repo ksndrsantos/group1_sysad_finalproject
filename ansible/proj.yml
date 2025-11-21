@@ -4,8 +4,8 @@
   become: yes
 
   vars:
-    docker_project_local_path: "{{ playbook_dir }}/../docker"    # Local path on Ansible controller
-  docker_project_remote_path: /home/lubuntu/group1_sysad_finalproject    # Path on remote hosts
+    docker_project_local_path: /home/onyk/proj/docker    # Local path on Ansible controller
+    docker_project_remote_path: /home/onyk/proj/docker   # Path on remote hosts
     container_name: proj_webapp_container
     nginx_image: nginx:latest
 
@@ -112,3 +112,4 @@
           - "8080:80"
         volumes:
           - "{{ docker_project_remote_path }}/index.html:/usr/share/nginx/html/index.html"
+
